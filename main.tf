@@ -11,55 +11,55 @@ provider "azurerm" {
   features {}
 }
 
-# Отримуємо дані про поточну підписку
-data "azurerm_subscription" "current" {}
-
-# TASK 1: Створення Resource Group з тегами
+# 1. Створюємо групу
 resource "azurerm_resource_group" "rg2" {
   name     = "az104-rg2"
   location = "East US"
-
   tags = {
     "Cost Center" = "000"
   }
 }
 
-# TASK 2: Призначення політики "Require a tag and its value"
-resource "azurerm_resource_group_policy_assignment" "require_tag" {
-  name                 = "require-cost-center-tag"
-  resource_group_id    = azurerm_resource_group.rg2.id
-  policy_definition_id = "/providers/Microsoft.Authorization/policyDefinitions/1e30110a-5ceb-460c-a204-c1a311c306d9"
-  display_name         = "Require Cost Center tag and its value 000"
-
-  parameters = <<PARAMS
-    {
-      "tagName": { "value": "Cost Center" },
-      "tagValue": { "value": "000" }
-    }
-PARAMS
+# 2. Шукаємо вбудовану політику "Require a tag..." за назвою
+data "azurerm_policy_definition" "require_tag_def" {
+  display_name = "Require a tag and its value on resources"
 }
 
-# TASK 3: Політика успадкування тегів (Inherit tag from RG)
-resource "azurerm_resource_group_policy_assignment" "inherit_tag" {
-  name                 = "inherit-cost-center-tag"
-  resource_group_id    = azurerm_resource_group.rg2.id
-  policy_definition_id = "/providers/Microsoft.Authorization/policyDefinitions/cd3aa116-8854-41c7-b088-89958f3ad6d8"
-  display_name         = "Inherit the Cost Center tag from the RG if missing"
+# 3. Шукаємо вбудовану політику "Inherit a tag..." за назвою
+data "azurerm_policy_definition" "inherit_tag_def" {
+  display_name = "Inherit a tag from the resource group if missing"
+}
 
-  location = "East US"
+# TASK 2: Призначення обов'язкового тегу
+resource "azurerm_resource_group_policy_assignment" "require_tag" {
+  name                 = "require-tag-assignment"
+  resource_group_id    = azurerm_resource_group.rg2.id
+  policy_definition_id = data.azurerm_policy_definition.require_tag_def.id
+  display_name         = "Require Cost Center tag"
+
+  parameters = jsonencode({
+    tagName  = { value = "Cost Center" }
+    tagValue = { value = "000" }
+  })
+}
+
+# TASK 3: Призначення успадкування тегу
+resource "azurerm_resource_group_policy_assignment" "inherit_tag" {
+  name                 = "inherit-tag-assignment"
+  resource_group_id    = azurerm_resource_group.rg2.id
+  policy_definition_id = data.azurerm_policy_definition.inherit_tag_def.id
+  display_name         = "Inherit Cost Center tag"
+  location             = "East US"
   identity { type = "SystemAssigned" }
 
-  parameters = <<PARAMS
-    {
-      "tagName": { "value": "Cost Center" }
-    }
-PARAMS
+  parameters = jsonencode({
+    tagName = { value = "Cost Center" }
+  })
 }
 
-# TASK 4: Створення блокування (Resource Lock)
+# TASK 4: Блокування на видалення
 resource "azurerm_management_lock" "rg_lock" {
   name       = "rg-lock"
   scope      = azurerm_resource_group.rg2.id
   lock_level = "CanNotDelete"
-  notes      = "Заборона видалення Resource Group для Lab 2b"
 }
