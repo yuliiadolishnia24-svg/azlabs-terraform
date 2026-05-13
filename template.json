@@ -1,0 +1,105 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "adminPassword": { "type": "securestring" }
+    },
+    "variables": {
+        "vnetName": "az104-06-vnet1",
+        "nsgName": "az104-06-nsg1",
+        "vmSize": "Standard_B2ats_v2"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2023-06-01",
+            "name": "[variables('nsgName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "securityRules": [
+                    { "name": "allow-rdp", "properties": { "protocol": "Tcp", "sourcePortRange": "*", "destinationPortRange": "3389", "sourceAddressPrefix": "*", "destinationAddressPrefix": "*", "access": "Allow", "priority": 1000, "direction": "Inbound" } },
+                    { "name": "allow-http", "properties": { "protocol": "Tcp", "sourcePortRange": "*", "destinationPortRange": "80", "sourceAddressPrefix": "*", "destinationAddressPrefix": "*", "access": "Allow", "priority": 1100, "direction": "Inbound" } }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "apiVersion": "2023-06-01",
+            "name": "[variables('vnetName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "addressSpace": { "addressPrefixes": ["10.60.0.0/22"] },
+                "subnets": [
+                    { "name": "subnet0", "properties": { "addressPrefix": "10.60.0.0/24" } },
+                    { "name": "subnet1", "properties": { "addressPrefix": "10.60.1.0/24" } }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2023-06-01",
+            "name": "az104-06-nic0",
+            "location": "[resourceGroup().location]",
+            "dependsOn": ["[variables('vnetName')]", "[variables('nsgName')]"],
+            "properties": {
+                "ipConfigurations": [{
+                    "name": "ipconfig1",
+                    "properties": {
+                        "subnet": { "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), 'subnet0')]" },
+                        "privateIPAllocationMethod": "Dynamic"
+                    }
+                }],
+                "networkSecurityGroup": { "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]" }
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2023-06-01",
+            "name": "az104-06-nic1",
+            "location": "[resourceGroup().location]",
+            "dependsOn": ["[variables('vnetName')]", "[variables('nsgName')]"],
+            "properties": {
+                "ipConfigurations": [{
+                    "name": "ipconfig1",
+                    "properties": {
+                        "subnet": { "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), 'subnet1')]" },
+                        "privateIPAllocationMethod": "Dynamic"
+                    }
+                }],
+                "networkSecurityGroup": { "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]" }
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2023-03-01",
+            "name": "az104-06-vm0",
+            "location": "[resourceGroup().location]",
+            "dependsOn": ["az104-06-nic0"],
+            "properties": {
+                "hardwareProfile": { "vmSize": "[variables('vmSize')]" },
+                "storageProfile": {
+                    "imageReference": { "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2019-Datacenter", "version": "latest" },
+                    "osDisk": { "createOption": "FromImage", "managedDisk": { "storageAccountType": "Standard_LRS" } }
+                },
+                "osProfile": { "computerName": "az104-06-vm0", "adminUsername": "localadmin", "adminPassword": "[parameters('adminPassword')]" },
+                "networkProfile": { "networkInterfaces": [{ "id": "[resourceId('Microsoft.Network/networkInterfaces', 'az104-06-nic0')]" }] }
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2023-03-01",
+            "name": "az104-06-vm1",
+            "location": "[resourceGroup().location]",
+            "dependsOn": ["az104-06-nic1"],
+            "properties": {
+                "hardwareProfile": { "vmSize": "[variables('vmSize')]" },
+                "storageProfile": {
+                    "imageReference": { "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2019-Datacenter", "version": "latest" },
+                    "osDisk": { "createOption": "FromImage", "managedDisk": { "storageAccountType": "Standard_LRS" } }
+                },
+                "osProfile": { "computerName": "az104-06-vm1", "adminUsername": "localadmin", "adminPassword": "[parameters('adminPassword')]" },
+                "networkProfile": { "networkInterfaces": [{ "id": "[resourceId('Microsoft.Network/networkInterfaces', 'az104-06-nic1')]" }] }
+            }
+        }
+    ]
+}
